@@ -6,4 +6,4 @@ build
 python/cylvdb.cpp
 python/cylvdb.html
 
-
+include/libleveldb.a
