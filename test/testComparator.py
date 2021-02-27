@@ -5,17 +5,24 @@ import cythondb as db
 
 DB_PATH = '~/Desktop/testdb'
 
+def reverse_comparator(a, b):
+    if a == b:
+        return 0
+    elif a > b:
+        return -1
+    else:
+        return 1
+
+
 def main():
-    testdb = db.DB(DB_PATH)
+    option = db.Options(compare_function=reverse_comparator)
+    testdb = db.DB(DB_PATH, option)
     testdb.put('alice', '123')
-    batch = db.WriteBatch()
-    batch.delete('alice')
-    batch.put('bob', '234')
-    batch.put('charlie', '456')
-    testdb.write_batch(batch)
-    assert testdb.get('bob') == '234'
-    assert testdb.get('alice') is None
+    testdb.put('bob', '234')
+    testdb.put('charlie', '456')
     
+    assert ' '.join(key for key, _ in testdb) == 'charlie bob alice'
+
     testdb.close()
     assert testdb.closed
 

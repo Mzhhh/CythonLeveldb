@@ -10,12 +10,15 @@ def main():
     testdb['alice'] = '123'
     testdb['bob'] = '234'
     testdb['charlie'] = '456'
-    print(testdb['bob'])
+    assert testdb['bob'] == '234'
     testdb['alice'] = None
-    print(testdb['alice'])
+    assert testdb['alice'] is None
     
     testdb.close()
     assert testdb.closed
+
+    print('Done!')
+
 
 if __name__ == '__main__':
     try:

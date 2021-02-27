@@ -10,16 +10,20 @@ def main():
     testdb.put('alice', '123')
     testdb.put('bob', '234')
     testdb.put('charlie', '456')
-    print(testdb.get('bob'))
+    assert testdb.get('bob') == '234'
     testdb.delete('alice')
-    print(testdb.get('alice'))
+    assert testdb.get('alice') is None
     
     testdb.close()
     assert testdb.closed
 
+    print('Test finished.')
 
 if __name__ == '__main__':
     try:
         main()
     finally:
-        shutil.rmtree(os.path.abspath(os.path.expanduser(DB_PATH)))
+        path = os.path.abspath(os.path.expanduser(DB_PATH))
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        print("Done!")

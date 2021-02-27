@@ -10,6 +10,9 @@ from libcpp cimport bool as c_bool
 from libcpp.string cimport string
 
 cimport leveldb
+from pycomparator cimport PyComparator_FromPyFunction
+
+from weakref import ref as weak_ref
 
 # status handling
 
@@ -50,13 +53,18 @@ cdef class Options:
 
     cdef leveldb.Options _options
     
-    def __cinit__(self, py_bool create_if_missing=True, 
+    def __cinit__(self, compare_function=None, py_bool create_if_missing=True, 
                    py_bool error_if_exists=None, py_bool paranoid_checks=None,
                    write_buffer_size=None, max_open_files=None,
                    block_restart_interval=None, max_file_size=None,
                    compression=None):
 
-        self._options.comparator = leveldb.BytewiseComparator()
+        if compare_function is None:
+            self._options.comparator = leveldb.BytewiseComparator()
+        else:
+            self._options.comparator = PyComparator_FromPyFunction(
+                                        compare_function, compare_function.__name__.encode('UTF-8')
+                                      )
         if create_if_missing is not None:
             self._options.create_if_missing = create_if_missing
         if error_if_exists is not None:
@@ -116,19 +124,25 @@ cdef class ReadOptions:
 
 cdef class Snapshot:
 
-    cdef leveldb.DB* _db_ptr
+    cdef DB _db_handler
     cdef const leveldb.Snapshot* _snapshot_ptr
 
     def __cinit__(self):
         pass
 
-    cdef _set(self, leveldb.DB* db, const leveldb.Snapshot* snapshot):
-        self._db_ptr = db
+    cdef _set(self, DB db, const leveldb.Snapshot* snapshot):
+        self._db_handler = db
         self._snapshot_ptr = snapshot
 
-    def __dealloc__(self):
-        self._db_ptr.ReleaseSnapshot(self._snapshot_ptr)
+    cdef _close(self):
+        if self._snapshot_ptr == NULL or self._db_handler.closed:
+            return 
+        self._db_handler._db.ReleaseSnapshot(self._snapshot_ptr)
+        self._snapshot_ptr = NULL
+        self._db_handler = None
 
+    def __dealloc__(self):
+        self._close()        
 
 # Write batch wrapper
 
@@ -243,15 +257,21 @@ cdef class Iterator:
     def __iter__(self):
         return self
 
-    def __dealloc__(self):
-        del self._iter_ptr
+    cdef _close(self):
+        if self._iter_ptr != NULL:
+            del self._iter_ptr
+            self._iter_ptr = NULL
 
+    def __dealloc__(self):
+        self._close()
 
 # DB wrapper
 
 cdef class DB:
 
     cdef leveldb.DB* _db
+    cdef list _snapshots
+    cdef list _iterators
 
     def __cinit__(self, str name not None, Options options=None):
         if options is None:
@@ -261,6 +281,8 @@ cdef class DB:
         cdef string full_path_encoded = full_path.encode('UTF-8')
         st = leveldb.DB.Open(options._options, full_path_encoded, &self._db)
         check_status(st)
+        self._snapshots = list()
+        self._iterators = list()
 
     def __setitem__(self, str key not None, str value):
         if value is None:  # delete
@@ -312,7 +334,8 @@ cdef class DB:
         if options is None:
             options = ReadOptions()
         cdef leveldb.Iterator* it_ptr = self._db.NewIterator(options._readOptions)
-        it._set_iter(it_ptr, reversed)        
+        it._set_iter(it_ptr, reversed)  
+        self._iterators.append(it)      
         return it
 
     def __iter__(self):  # default iterator
@@ -321,7 +344,8 @@ cdef class DB:
     def get_snapshot(self):
         cdef const leveldb.Snapshot* snapshot = self._db.GetSnapshot()
         cdef Snapshot ret = Snapshot()
-        ret._set(self._db, snapshot)
+        ret._set(self, snapshot)
+        self._snapshots.append(ret)
         return ret
 
     def get_property(self, str property not None):
@@ -360,13 +384,23 @@ cdef class DB:
         self._db.CompactRange(beginSlice, endSlice)
         del beginSlice, endSlice
 
+    def __dealloc__(self):
+        self.close()
+
     def close(self):
+        cdef Snapshot snapshot
+        cdef Iterator iterator
         if self._db != NULL:
+            for snapshot in self._snapshots:
+                snapshot._close()
+            for iterator in self._iterators:
+                iterator._close()
             del self._db
+            self._db = NULL
 
     @property
     def closed(self):
-        return self._db != NULL
+        return self._db == NULL
 
 
 # DB static function wrapper

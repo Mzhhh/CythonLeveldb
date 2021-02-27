@@ -10,19 +10,25 @@ def main():
     testdb.put('alice', '123')
     testdb.put('bob', '234')
     snapshot = testdb.get_snapshot()
+    testdb.delete('bob')
     testdb.put('charlie', '456')
     read_option = db.ReadOptions()
     read_option.register_snapshot(snapshot)
-    print(testdb.get('alice', read_option))
-    print(testdb.get('charlie', read_option))
+    assert testdb.get('alice', read_option) == '123'
+    assert testdb.get('bob', read_option) == '234'
+    assert testdb.get('charlie', read_option) is None
     read_option.release_snapshot()
 
     testdb.close()
     assert testdb.closed
 
+    print('Test finished.')
 
 if __name__ == '__main__':
     try:
         main()
     finally:
-        shutil.rmtree(os.path.abspath(os.path.expanduser(DB_PATH)))
+        path = os.path.abspath(os.path.expanduser(DB_PATH))
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        print("Done!")

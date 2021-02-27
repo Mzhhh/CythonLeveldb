@@ -19,33 +19,40 @@ def main():
     testdb.put('hamilton', '999')
     
     # iter
-    print(' '.join((key for key, _ in testdb)))
+    assert ' '.join((key for key, _ in testdb)) == 'alice bob charlie dave eve francis gary hamilton'
 
     # iter with snapshot
     option = db.ReadOptions()
     option.register_snapshot(snapshot)
-    print(' '.join(key for key, _ in testdb.get_iterator(option)))
+    assert ' '.join(key for key, _ in testdb.get_iterator(option)) == 'alice bob charlie dave eve'
 
     # seek methods
     it = iter(testdb)
     it.seek('d')
-    print(' '.join((key for key, _ in it)))
+    assert ' '.join((key for key, _ in it)) == 'dave eve francis gary hamilton'
+    del it
 
     # reversed iter
-    print(' '.join((key for key, _ in testdb.get_iterator(reversed=True))))
+    assert ' '.join((key for key, _ in testdb.get_iterator(reversed=True))) == \
+           'hamilton gary francis eve dave charlie bob alice'
 
     # reversed iter & seek
-    del it
+   
     it = testdb.get_iterator(reversed=True)
     it.seek('d')
-    print(' '.join((key for key, _ in it)))
+    assert ' '.join((key for key, _ in it)) == 'charlie bob alice'
+    del it
     
     testdb.close()
     assert testdb.closed
     
+    print('Test finished.')
 
 if __name__ == '__main__':
     try:
         main()
     finally:
-        shutil.rmtree(os.path.abspath(os.path.expanduser(DB_PATH)))
+        path = os.path.abspath(os.path.expanduser(DB_PATH))
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        print("Done!")
